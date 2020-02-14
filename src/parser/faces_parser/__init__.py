@@ -1,10 +1,8 @@
 import json
-import numpy as np
 import pandas as pd
 import os
-import glob
-from tqdm import tqdm_notebook as tqdm
 from itertools import chain
+from src.parser.base import correct_types
 
 
 l_value_keys = ['Eyeglasses',
@@ -47,12 +45,17 @@ def get_info_from_keys_with_value_all(face_detailes, l_value_keys):
 
 
 def get_emotions(face_detailes, threshold):
-    l = list(chain.from_iterable([[em.get('Type') for em in face.get('Emotions') if em.get('Confidence') > threshold]
-                  for face in face_detailes]))
+    l = list(chain.from_iterable(
+        [
+            [em.get('Type') for em in face.get('Emotions') if em.get('Confidence') > threshold]
+            for face in face_detailes
+        ]
+                                )
+            )
     return {'Emotions': '|'.join(l)}
 
 
-def parse_one_json(json_path):
+def parse_one_json(json_path, threshold):
     dict_data_of_one_json = {}
     dict_data_of_one_json['movie_id'] = int(
         os.path.split(os.path.split(os.path.split(json_path)[0])[0])[1])
@@ -66,36 +69,8 @@ def parse_one_json(json_path):
 
     if no_faces > 0:
         dict_data_of_one_json.update(get_info_from_keys_with_value_all(face_detailes, l_value_keys))
-        dict_data_of_one_json.update(get_emotions(face_detailes, 50))
+        dict_data_of_one_json.update(get_emotions(face_detailes, threshold))
     df = pd.DataFrame(dict_data_of_one_json, index=[0], columns=columns.keys())
-    correct_types(df)
+    correct_types(df, columns)
     return df
 
-
-def correct_types(df):
-    for col in df.columns:
-        type_ = columns.get(col)
-        if type_ is not None:
-            df[col] = df[col].astype(type_)
-
-
-def dump_to_db(con, table_name, df):
-    con.put(key=table_name, value=df, format='table', data_coulmns=True, append=True,
-            min_itemsize=250)
-
-
-def parse_jsons(l_json, con):
-    dfs = []
-    table_name = 'faces'
-    for i, json_path in tqdm(enumerate(l_json), total=len(l_json)):
-        if 'faces' not in json_path:
-            continue
-
-        dfs.append(parse_one_json(json_path))
-        if i % 100 == 0:
-            df = pd.concat(dfs, ignore_index=True)
-            dump_to_db(con, table_name, df)
-            dfs = []
-
-    df = pd.concat(dfs, ignore_index=True)
-    dump_to_db(con, table_name, df)
