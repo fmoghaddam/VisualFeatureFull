@@ -1,38 +1,31 @@
 import json
 import pandas as pd
 import os
-from src.parser.base import correct_types
+import re
 
-columns = {'movie_id': str
-           , 'image_name': str
-           , 'no_of_celebrities': float
-           , 'celebrity_names': str
-           , 'celebrity_ids': str
+celebrity_json_report_regex = r"(\d+)\W{1,2}celebrity\W{1,2}(image-\d+\.jpg)\.json"
+
+def extract_celebrity_info(celebrity_face_jsonobject,movie_id,frame_id):
+    return {'movie_id': movie_id,\
+            'image_name':frame_id,\
+            'match_confidence':celebrity_face_jsonobject['MatchConfidence'], \
+            'celebrity_name': celebrity_face_jsonobject['Name'], \
+            'celebrity_id': celebrity_face_jsonobject['Id'], \
+            'celebrity_urls': '|'.join(celebrity_face_jsonobject['Urls']) \
            }
 
-
-def get_celebrity_names(celebrities):
-    return '|'.join([c.get('Name') for c in celebrities])
-
-
-def get_celebrity_ids(celebrities):
-    return '|'.join([c.get('Id') for c in celebrities])
-
-
-def parse_one_json(json_path, threshold):
-    dict_data_of_one_json = {}
-    dict_data_of_one_json['movie_id'] = int(
-        os.path.split(os.path.split(os.path.split(json_path)[0])[0])[1])
-    dict_data_of_one_json['image_name'] = os.path.split(json_path)[1].replace('.json', '')
-    with open(json_path, 'r') as f:
-        celeb = json.load(f)
-    celebrities = [d for d in celeb['CelebrityFaces'] if d.get('MatchConfidence') > threshold]
-    no_of_celebs = len(celebrities)
-    dict_data_of_one_json['no_of_celebrities'] = no_of_celebs
-    if no_of_celebs > 0:
-        dict_data_of_one_json['celebrity_names'] = get_celebrity_names(celebrities)
-        dict_data_of_one_json['celebrity_ids'] = get_celebrity_ids(celebrities)
-    df = pd.DataFrame(dict_data_of_one_json, index=[0], columns=columns.keys())
-    correct_types(df, columns)
+def parse_one_json(json_path):
+    matches = re.search(celebrity_json_report_regex, json_path)
+    movie_id = matches.group(1)
+    frame_id = matches.group(2)
+    
+    celebrities = []
+    with open(json_path,encoding='latin-1') as json_file:
+         json_data = json.load(json_file)
+        
+    for celebrity_face in json_data['CelebrityFaces']:
+        extracted_celebrity_info = extract_celebrity_info(celebrity_face,movie_id,frame_id)
+        celebrities.append(extracted_celebrity_info)
+            
+    df = pd.DataFrame(celebrities)
     return df
-

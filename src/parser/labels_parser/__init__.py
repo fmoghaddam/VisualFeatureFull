@@ -1,32 +1,29 @@
 import json
 import pandas as pd
 import os
-from src.parser.base import correct_types
+import re
 
-columns = {'movie_id': str
-           , 'image_name': str
-           , 'no_of_labels' : float
-           , 'labels': str
+
+labels_json_report_regex = r"(\d+)\W{1,2}labels\W{1,2}(image-\d+\.jpg)\.json"
+
+def get_labels(labels_json_object):
+    return {'no_of_labels' : len(labels_json_object.get('Labels')) \
+            , 'names': '|'.join([label.get('Name') for label in labels_json_object.get('Labels')]) \
+            , 'confidences': '|'.join([str(label.get('Confidence', 0)) for label in labels_json_object.get('Labels')]) \
            }
 
 
-def get_labels(json_object, threshold):
-    return '|'.join([label.get('Name')
-                     for label in json_object.get('Labels')
-                     if label.get('Confidence', 0) > threshold])
-
-
-def parse_one_json(json_path, threshold):
-    dict_data_of_one_json = {}
-    dict_data_of_one_json['movie_id'] = int(
-        os.path.split(os.path.split(os.path.split(json_path)[0])[0])[1])
-    dict_data_of_one_json['image_name'] = os.path.split(json_path)[1].replace('.json', '')
-    with open(json_path, 'r') as f:
-        labels = json.load(f)
-    no_of_labels = len(labels.get('Labels'))
-    dict_data_of_one_json['no_of_labels'] = no_of_labels
-    if no_of_labels > 0:
-        dict_data_of_one_json['labels'] = get_labels(labels, threshold)
-    df = pd.DataFrame(dict_data_of_one_json, index=[0], columns=columns.keys())
-    correct_types(df, columns)
+def parse_one_json(json_path):
+    matches = re.search(labels_json_report_regex, json_path)
+    movie_id = matches.group(1)
+    frame_id = matches.group(2)
+    
+    
+    with open(json_path,encoding='latin-1') as json_file:
+        labels_json_data = json.load(json_file)
+        
+    labels = get_labels(labels_json_data)
+    
+    df = pd.DataFrame(labels, index=[0])
+    
     return df
